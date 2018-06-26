@@ -3,16 +3,16 @@ use std::error;
 use std::fmt;
 use std::io::{ErrorKind, Read, Write};
 use std::marker;
-use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr, IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::{SystemTime, Duration};
+use std::time::{Duration, SystemTime};
 
 extern crate hex;
 extern crate rand;
 
 extern crate byteorder;
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{BigEndian, ByteOrder};
 
 extern crate regex;
 use regex::Regex;
@@ -252,7 +252,7 @@ fn web_root(_: HttpRequest) -> HttpResponse {
             color: color,
             status: status_txt,
         }.render()
-            .unwrap_or("".to_string());        
+            .unwrap_or("".to_string());
     } else {
         info!("error acquiring lock on read status");
     }
@@ -561,13 +561,13 @@ struct DinSms {
 #[derive(Debug)]
 struct DinUssd {
     port: u8,
-    status: u8,    
+    status: u8,
     length: u16,
     encoding: u8,
     content: String,
 }
 
-fn gw_save_sms(sms: DinSms) -> Result<(), Box<error::Error>>{
+fn gw_save_sms(sms: DinSms) -> Result<(), Box<error::Error>> {
     let db = conn_db()?;
     let msg_id = format!("{}", uuid::Uuid::new_v4().simple());
     let msg_val = Msg {
@@ -586,7 +586,7 @@ fn gw_save_sms(sms: DinSms) -> Result<(), Box<error::Error>>{
     Ok(())
 }
 
-fn gw_save_ussd(ussd: DinUssd) -> Result<(), Box<error::Error>>{
+fn gw_save_ussd(ussd: DinUssd) -> Result<(), Box<error::Error>> {
     let db = conn_db()?;
     let msg_id = format!("{}", uuid::Uuid::new_v4().simple());
     let msg_val = Msg {
@@ -607,8 +607,8 @@ fn gw_save_ussd(ussd: DinUssd) -> Result<(), Box<error::Error>>{
 fn gw_get_content(v8: Vec<u8>, encoding: u8) -> String {
     if encoding == 1 {
         let mut v16: Vec<u16> = Vec::new();
-        for i in 0..v8.len()/2 {
-            let u16n =((v8[i * 2] as u16) << 8) | v8[i * 2 + 1] as u16;
+        for i in 0..v8.len() / 2 {
+            let u16n = ((v8[i * 2] as u16) << 8) | v8[i * 2 + 1] as u16;
             v16.push(u16n);
         }
         String::from_utf16_lossy(&v16)
@@ -619,29 +619,36 @@ fn gw_get_content(v8: Vec<u8>, encoding: u8) -> String {
 
 fn gw_parse_type(htype: u16, data: &[u8], ping: &mut Ping) -> DinData {
     match htype {
-        0 => { // ping alive
+        0 => {
+            // ping alive
             ping.ping_sent = false;
             if let Ok(mut status) = APP_STATE.status.write() {
                 *status = true;
             } else {
-                info!("error when acquring lock write on status");    
+                info!("error when acquring lock write on status");
             }
             info!("<- gw alive");
         }
-        7 => { // status message
+        7 => {
+            // status message
             info!("<- status message");
             return DinData {
                 htype: 8,
-                body: vec!(0),
-            }
+                body: vec![0],
+            };
         }
-        5 => { // receive message
+        5 => {
+            // receive message
             info!("<- receive message");
             let mut sms = DinSms {
-                number: String::from_utf8_lossy(&data[0..24]).to_string().replace("\u{0}",""),
+                number: String::from_utf8_lossy(&data[0..24])
+                    .to_string()
+                    .replace("\u{0}", ""),
                 stype: data[24],
                 port: data[25] + 1,
-                timestamp: String::from_utf8_lossy(&data[26..41]).to_string().replace("\u{0}",""),
+                timestamp: String::from_utf8_lossy(&data[26..41])
+                    .to_string()
+                    .replace("\u{0}", ""),
                 timezone: data[41] as i8,
                 encoding: data[42],
                 length: BigEndian::read_u16(&data[43..45]),
@@ -653,48 +660,51 @@ fn gw_parse_type(htype: u16, data: &[u8], ping: &mut Ping) -> DinData {
             }
             return DinData {
                 htype: 6,
-                body: vec!(0),
-            }
+                body: vec![0],
+            };
         }
-        3 => { // sms result
+        3 => {
+            // sms result
             info!("<- sms result");
             return DinData {
                 htype: 4,
-                body: vec!(0),
-            }
+                body: vec![0],
+            };
         }
-        11 => { // ussd result
+        11 => {
+            // ussd result
             info!("<- ussd result");
             let mut ussd = DinUssd {
                 port: data[0] + 1,
                 status: data[1],
                 length: BigEndian::read_u16(&data[2..4]),
-                encoding: data[4],                
+                encoding: data[4],
                 content: "".to_string(),
-            };  
+            };
             let content = gw_get_content(data[5..].to_vec(), ussd.encoding);
-            let content_bin = hex::decode(content).unwrap_or(vec!(0));
+            let content_bin = hex::decode(content).unwrap_or(vec![0]);
             ussd.content = gw_get_content(content_bin, 1);
             if let Err(e) = gw_save_ussd(ussd) {
                 info!("error when saving ussd to database: {}", e);
             }
             return DinData {
                 htype: 12,
-                body: vec!(0),
-            }
+                body: vec![0],
+            };
         }
-        515 => { // call state report
+        515 => {
+            // call state report
             info!("<- call state result");
             return DinData {
                 htype: 516,
-                body: vec!(0),
-            }
+                body: vec![0],
+            };
         }
         _ => {}
-    } 
+    }
     DinData {
         htype: 0,
-        body: vec!(),
+        body: vec![],
     }
 }
 
@@ -711,9 +721,11 @@ fn pkt_u16(pkt: &mut Vec<u8>, value: u16) {
 }
 
 fn gw_send(mut stream: &TcpStream, header: DinHeader, sdata: DinData) {
-    let mut pkt: Vec<u8> = vec!();
+    let mut pkt: Vec<u8> = vec![];
     pkt_u32(&mut pkt, sdata.body.len() as u32);
-    pkt.append(&mut Vec::from(hex::decode(header.mac).unwrap_or(vec!(0,0,0,0,0,0))));
+    pkt.append(&mut Vec::from(
+        hex::decode(header.mac).unwrap_or(vec![0, 0, 0, 0, 0, 0]),
+    ));
     pkt_u16(&mut pkt, 0);
     pkt_u32(&mut pkt, header.time);
     pkt_u32(&mut pkt, header.serial);
@@ -727,7 +739,9 @@ fn gw_send(mut stream: &TcpStream, header: DinHeader, sdata: DinData) {
 }
 
 fn gw_parse_data(stream: &TcpStream, data: &[u8], ping: &mut Ping) {
-    if data.len() < 24 {()}
+    if data.len() < 24 {
+        ()
+    }
     info!("<- {}", hex::encode(data));
     let header = DinHeader {
         len: BigEndian::read_u32(&data[0..4]),
@@ -738,7 +752,9 @@ fn gw_parse_data(stream: &TcpStream, data: &[u8], ping: &mut Ping) {
         flag: BigEndian::read_u16(&data[22..24]),
     };
     let data_len: usize = 24 + (header.len as usize);
-    if data.len() < data_len {()}
+    if data.len() < data_len {
+        ()
+    }
     let sdata = gw_parse_type(header.htype, &data[24..data_len], ping);
     if sdata.htype != 0 {
         gw_send(stream, header, sdata)
@@ -754,7 +770,7 @@ fn gw_create_header() -> DinHeader {
         htype: 0,
         flag: 0,
     }
-}   
+}
 
 fn gw_ping_fn(stream: &TcpStream) {
     gw_send(
@@ -762,13 +778,17 @@ fn gw_ping_fn(stream: &TcpStream) {
         gw_create_header(),
         DinData {
             htype: 0,
-            body: vec!(),
-        })
-}  
+            body: vec![],
+        },
+    )
+}
 
 fn gw_queue_fn(stream: &TcpStream) {
     if let Ok(db) = conn_db() {
-        if let Ok(results) = msg::table.filter(msg::status.eq(MsgStatus::Sending)).load::<Msg>(&db) {
+        if let Ok(results) = msg::table
+            .filter(msg::status.eq(MsgStatus::Sending))
+            .load::<Msg>(&db)
+        {
             for result in results {
                 match result.msg_type {
                     MsgType::SmsOut => {
@@ -781,17 +801,17 @@ fn gw_queue_fn(stream: &TcpStream) {
                         body.push(43); // +
                         let mut phone_bytes = result.phone.as_bytes().to_vec();
                         body.append(&mut phone_bytes);
-                        for _ in 1 .. (13 - phone_bytes.len()) {
+                        for _ in 1..(13 - phone_bytes.len()) {
                             body.push(0);
                         }
                         let mut msg: Vec<u8> = Vec::new();
                         let mut v16: Vec<u16> = result.msg_txt.encode_utf16().collect();
                         for v in v16 {
-                            let mut v8: Vec<u8> = vec!(0, 0);
+                            let mut v8: Vec<u8> = vec![0, 0];
                             BigEndian::write_u16(&mut v8, v);
                             msg.append(&mut v8);
                         }
-                        let mut len: Vec<u8> = vec!(0, 0);
+                        let mut len: Vec<u8> = vec![0, 0];
                         BigEndian::write_u16(&mut len, msg.len() as u16);
                         body.append(&mut len);
                         body.append(&mut msg);
@@ -800,14 +820,14 @@ fn gw_queue_fn(stream: &TcpStream) {
                             body: body,
                         };
                         gw_send(stream, gw_create_header(), sdata);
-                    },
+                    }
                     MsgType::UssdOut => {
                         info!("sending ussd to port {}", result.slot);
                         let mut body: Vec<u8> = Vec::new();
                         body.push(result.slot as u8 - 1);
                         body.push(1);
                         body.push(0);
-                        body.push(0);                        
+                        body.push(0);
                         BigEndian::write_u16(&mut body[2..4], result.msg_txt.len() as u16);
                         let mut msg_bytes = result.msg_txt.as_bytes().to_vec();
                         body.append(&mut msg_bytes);
@@ -816,13 +836,14 @@ fn gw_queue_fn(stream: &TcpStream) {
                             body: body,
                         };
                         gw_send(stream, gw_create_header(), sdata);
-                    },
+                    }
                     _ => {}
                 }
                 let target = msg::table.filter(msg::msg_id.eq(result.msg_id));
                 if let Err(e) = diesel::update(target)
                     .set(msg::status.eq(MsgStatus::Sent))
-                    .execute(&db) {
+                    .execute(&db)
+                {
                     info!("error when updating status of msg in database: {}", e);
                 }
             }
@@ -838,18 +859,20 @@ fn gw_conn(mut stream: TcpStream, peer_addr: SocketAddr) {
     let mut data = [0 as u8; 66560];
     let mut now = SystemTime::now();
     let mut ping = Ping { ping_sent: false };
-    stream.set_read_timeout(Some(Duration::from_secs(APP_STATE.app_cfg.gw_queue_timer as u64)))
+    stream
+        .set_read_timeout(Some(Duration::from_secs(
+            APP_STATE.app_cfg.gw_queue_timer as u64,
+        )))
         .expect("could not set stream read timeout");
     while match stream.read(&mut data) {
         Ok(size) => {
             if size != 0 {
                 gw_parse_data(&stream, &data[0..size], &mut ping);
                 true
-            }
-            else {
+            } else {
                 false
             }
-        },
+        }
         Err(e) => {
             if e.kind() != ErrorKind::TimedOut {
                 info!("error occurred, terminating connection with {}", peer_addr);
@@ -857,7 +880,7 @@ fn gw_conn(mut stream: TcpStream, peer_addr: SocketAddr) {
                     info!("error when shutdown stream with {} :{}", peer_addr, e);
                 }
                 false
-            } else {                
+            } else {
                 if let Ok(dur) = now.elapsed() {
                     if dur > Duration::from_secs(APP_STATE.app_cfg.gw_ping_timer as u64) {
                         if ping.ping_sent {
@@ -869,11 +892,11 @@ fn gw_conn(mut stream: TcpStream, peer_addr: SocketAddr) {
                             if let Ok(mut status) = APP_STATE.status.write() {
                                 *status = false;
                             } else {
-                                info!("error when acquring lock write on status");    
+                                info!("error when acquring lock write on status");
                             }
                         } else {
                             ping.ping_sent = true;
-                            gw_ping_fn(&stream);                            
+                            gw_ping_fn(&stream);
                             now = SystemTime::now();
                         }
                     }
@@ -900,16 +923,16 @@ fn gw_th_fn() {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    let peer_addr = stream.peer_addr().unwrap_or(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0));
+                    let peer_addr = stream
+                        .peer_addr()
+                        .unwrap_or(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0));
                     info!("gw connected: {}", peer_addr);
                     if let Ok(mut status) = APP_STATE.status.write() {
                         *status = true;
                     } else {
-                        info!("error when acquring lock write on status");    
+                        info!("error when acquring lock write on status");
                     }
-                    thread::spawn(move|| {
-                        gw_conn(stream, peer_addr)
-                    });
+                    thread::spawn(move || gw_conn(stream, peer_addr));
                 }
                 Err(e) => {
                     info!("error when connecting gw: {}", e);
@@ -920,11 +943,10 @@ fn gw_th_fn() {
     } else {
         info!("can not bind gw listener to {}", bind);
     }
-    
 }
 
 fn main() {
-    setup_log().expect("can not setup logging");    
+    setup_log().expect("can not setup logging");
     let bind = &format!(
         "{}:{}",
         APP_STATE.app_cfg.api_host, APP_STATE.app_cfg.api_port
