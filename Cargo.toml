@@ -1,0 +1,25 @@
+[package]
+name = "dsm"
+version = "0.1.0"
+authors = ["ph"]
+
+[dependencies]
+actix-web = "*"
+rust-ini = "*"
+log = "*"
+log-panics = "*"
+chrono = "*"
+log4rs = { version = "*", features = ["all_components"] }
+diesel = { version = "*", features = ["sqlite", "chrono"] }
+diesel-derive-enum = { version = "*", features = ["sqlite"] }
+libsqlite3-sys = { version = "*", features = ["bundled"] }
+askama = "*"
+serde = "*"
+serde_derive = "*"
+serde_urlencoded = "*"
+uuid = { version = "*", features = ["v4"] }
+lazy_static = "*"
+regex = "*"
+hex = "*"
+byteorder = "*"
+rand = "*"
