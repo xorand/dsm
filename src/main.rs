@@ -874,8 +874,8 @@ fn gw_conn(mut stream: TcpStream, peer_addr: SocketAddr) {
             }
         }
         Err(e) => {
-            if e.kind() != ErrorKind::TimedOut {
-                info!("error occurred, terminating connection with {}", peer_addr);
+            if (e.kind() != ErrorKind::TimedOut) && (e.kind() != ErrorKind::WouldBlock) {
+                info!("error {:?} occurred, terminating connection with {}", e.kind(), peer_addr);
                 if let Err(e) = stream.shutdown(Shutdown::Both) {
                     info!("error when shutdown stream with {} :{}", peer_addr, e);
                 }
