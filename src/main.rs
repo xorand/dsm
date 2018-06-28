@@ -581,6 +581,7 @@ struct ApiResult {
 }
 
 #[derive(Serialize)]
+#[serde(untagged)]
 enum ApiResultItem {
     SmsItem(ApiResultSmsItem),
     InfoItem(ApiResultInfoItem),
