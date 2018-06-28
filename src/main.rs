@@ -577,7 +577,7 @@ struct ApiCheckInfo {
 struct ApiResult {
     error_no: u8,
     error_msg: String,
-    items: HashMap<String, String>,
+    items: Vec<HashMap<String, String>>,
 }
 
 fn api_check_sms(sms_id: String) -> bool {
@@ -606,7 +606,7 @@ macro_rules! check_api_key {
             return Ok(Json(ApiResult {
                 error_no: 1,
                 error_msg: "API Key Not Found".to_string(),
-                items: HashMap::new(),
+                items: vec![HashMap::new()],
             }));
         }
     }};
@@ -621,14 +621,16 @@ fn api(req: String) -> Result<Json<ApiResult>> {
                 return Ok(Json(ApiResult {
                     error_no: 0,
                     error_msg: "OK".to_string(),
-                    items: [
-                        ("phone".to_string(), to_n),
-                        ("sms_id".to_string(), sms_id),
-                        ("error_no".to_string(), "0".to_string()),
-                        ("error_msg".to_string(), "OK".to_string()),
-                    ].iter()
-                        .cloned()
-                        .collect(),
+                    items: vec![
+                        [
+                            ("phone".to_string(), format!("+{}", to_n)),
+                            ("sms_id".to_string(), sms_id),
+                            ("error_no".to_string(), "0".to_string()),
+                            ("error_msg".to_string(), "OK".to_string()),
+                        ].iter()
+                            .cloned()
+                            .collect(),
+                    ],
                 }));
             } else {
                 info!("error adding msg from api call");
@@ -647,19 +649,21 @@ fn api(req: String) -> Result<Json<ApiResult>> {
             return Ok(Json(ApiResult {
                 error_no: 0,
                 error_msg: "OK".to_string(),
-                items: [
-                    ("status_no".to_string(), status.to_string()),
-                    ("error_msg".to_string(), "OK".to_string()),
-                ].iter()
-                    .cloned()
-                    .collect(),
+                items: vec![
+                    [
+                        ("status_no".to_string(), status.to_string()),
+                        ("error_msg".to_string(), "OK".to_string()),
+                    ].iter()
+                        .cloned()
+                        .collect(),
+                ],
             }));
         }
     };
     Ok(Json(ApiResult {
         error_no: 0,
         error_msg: "OK".to_string(),
-        items: HashMap::new(),
+        items: vec![HashMap::new()],
     }))
 }
 
