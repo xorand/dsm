@@ -4,6 +4,7 @@ use std::fmt;
 use std::io::{ErrorKind, Read, Write};
 use std::marker;
 use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -27,6 +28,7 @@ extern crate uuid;
 #[macro_use]
 extern crate log;
 extern crate chrono;
+use chrono::format::strftime::StrftimeItems;
 use chrono::Local;
 use chrono::NaiveDateTime;
 extern crate log4rs;
@@ -75,6 +77,34 @@ impl fmt::Display for MsgType {
             MsgType::SmsOut => write!(f, "sms out"),
             MsgType::UssdIn => write!(f, "ussd in"),
             MsgType::UssdOut => write!(f, "ussd out"),
+        }
+    }
+}
+
+pub enum ParseError {
+    Error,
+}
+
+impl FromStr for MsgStatus {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "sending" => Ok(MsgStatus::Sending),
+            "sent" => Ok(MsgStatus::Sent),
+            _ => Err(ParseError::Error),
+        }
+    }
+}
+
+impl FromStr for MsgType {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "sms in" => Ok(MsgType::SmsIn),
+            "sms out" => Ok(MsgType::SmsOut),
+            "ussd in" => Ok(MsgType::UssdIn),
+            "ussd out" => Ok(MsgType::UssdOut),
+            _ => Err(ParseError::Error),
         }
     }
 }
@@ -363,28 +393,153 @@ fn add_msg(
     source = "<html>
     <meta charset='utf-8'>
     <table border=1>
-    <th>date</th><th>msg type</th><th>phone</th><th>msg id</th><th>msg</th><th>slot</th><th>status</th>
+    <th>date</th><th>msg id</th><th>msg type</th><th>phone</th><th>msg</th><th>slot</th><th>status</th>
+    <tr><form action='/msgs/' method='post'>
+    <td><input type='date' name='date1' value='{{date1}}'></td>
+    <td><input type='date' name='date2' value='{{date2}}'></td>
+    <td>
+    <select name='msg_type' size='1'>
+    {% for key in opt_msg_type %}
+    <option value='{{key}}'
+    {% if key == msg_type %} selected='selected' {%endif%}>
+        {{key}}
+    </option>
+    {% endfor %}
+    </select>
+    </td>
+    <td><input name='phone' type='text' size='8' value='{{phone}}'></td>
+    <td><input name='msg_txt' type='text' size='24' value='{{msg_txt}}'></td>
+    <td><input name='slot' type='text' size='1' value='{{slot}}'></td>
+    <td>
+    <select name='status' size='1'>
+    {% for key in opt_msg_status %}
+    <option value='{{key}}'
+    {% if key == status %} selected='selected' {%endif%}>
+        {{key}}
+    </option>
+    {% endfor %}
+    </select>
+    </td>
+    <td><input type='submit' value='ok'></form></td></tr>
     {% for msg in msgs %}
-    <tr><td>{{msg.msg_date}}</td>
-        <td>{{msg.msg_type}}</td>
-        <td>{{msg.phone}}</td>
+    <tr><td>{{msg.msg_date.format_with_items(fmt.clone()).to_string()}}</td>
         <td>{{msg.msg_id}}</td>
+        <td>{{msg.msg_type}}</td>
+        <td>{{msg.phone}}</td>        
         <td>{{msg.msg_txt}}</td>
         <td>{{msg.slot}}</td>
-        <td>{{msg.status}}</td>
-    </tr>
+        <td>{{msg.status}}</td>        
+    </tr>    
     {% endfor %}
     </table></html>",
     ext = "html"
 )]
-struct WebMsgsTpl {
+struct WebMsgsTpl<'a> {
     msgs: Vec<Msg>,
+    opt_msg_type: Vec<String>,
+    opt_msg_status: Vec<String>,
+    date1: &'a str,
+    date2: &'a str,
+    msg_type: &'a str,
+    phone: &'a str,
+    msg_txt: &'a str,
+    slot: &'a str,
+    status: &'a str,
+    fmt: StrftimeItems<'a>,
 }
 
-fn web_msgs(_: HttpRequest) -> HttpResponse {
+#[derive(Deserialize)]
+struct MsgsFilter {
+    date1: String,
+    date2: String,
+    msg_type: String,
+    phone: String,
+    msg_txt: String,
+    slot: String,
+    status: String,
+}
+
+fn web_msgs(filter: Option<Form<MsgsFilter>>) -> HttpResponse {
     if let Ok(db) = conn_db() {
-        if let Ok(msgs) = msg::table.load::<Msg>(&db) {
-            let body = WebMsgsTpl { msgs: msgs }.render().unwrap_or("".to_string());
+        let f: MsgsFilter;
+        match filter {
+            Some(filter) => {
+                f = MsgsFilter {
+                    date1: filter.date1.clone(),
+                    date2: filter.date2.clone(),
+                    msg_type: filter.msg_type.clone(),
+                    phone: filter.phone.clone(),
+                    msg_txt: filter.msg_txt.clone(),
+                    slot: filter.slot.clone(),
+                    status: filter.status.clone(),
+                };
+            }
+            None => {
+                f = MsgsFilter {
+                    date1: "".to_string(),
+                    date2: "".to_string(),
+                    msg_type: "".to_string(),
+                    phone: "".to_string(),
+                    msg_txt: "".to_string(),
+                    slot: "".to_string(),
+                    status: "".to_string(),
+                }
+            }
+        }
+        let mut query = msg::table.into_boxed();
+        if f.date1 != "" {
+            if let Ok(date1) = NaiveDateTime::parse_from_str(
+                &format!("{} 00:00:00", f.date1),
+                "%Y-%m-%d  %H:%M:%S",
+            ) {
+                query = query.filter(msg::msg_date.ge(date1));
+            }
+        }
+        if f.date2 != "" {
+            if let Ok(date2) = NaiveDateTime::parse_from_str(
+                &format!("{} 23:59:59", f.date2),
+                "%Y-%m-%d  %H:%M:%S",
+            ) {
+                query = query.filter(msg::msg_date.le(date2));
+            }
+        }
+        if let Ok(msg_type) = MsgType::from_str(&f.msg_type) {
+            query = query.filter(msg::msg_type.eq(msg_type));
+        }
+        if f.phone != "" {
+            query = query.filter(msg::phone.like(format!("%{}%", f.phone)));
+        }
+        if f.msg_txt != "" {
+            query = query.filter(msg::msg_txt.like(format!("%{}%", f.msg_txt)));
+        }
+        if f.slot != "" {
+            query = query.filter(msg::slot.eq(f.slot.parse::<i32>().unwrap_or(0)));
+        }
+        if let Ok(status) = MsgStatus::from_str(&f.status) {
+            query = query.filter(msg::status.eq(status));
+        }
+        if let Ok(msgs) = query.load(&db) {
+            let fmt = StrftimeItems::new("%d-%m-%Y %H:%M:%S");
+            let body = WebMsgsTpl {
+                msgs: msgs,
+                opt_msg_type: vec![
+                    "".to_string(),
+                    "sms in".to_string(),
+                    "sms out".to_string(),
+                    "ussd in".to_string(),
+                    "ussd out".to_string(),
+                ],
+                opt_msg_status: vec!["".to_string(), "sending".to_string(), "sent".to_string()],
+                date1: &f.date1,
+                date2: &f.date2,
+                msg_type: &f.msg_type,
+                phone: &f.phone,
+                msg_txt: &f.msg_txt,
+                slot: &f.slot,
+                status: &f.status,
+                fmt: fmt,
+            }.render()
+                .unwrap_or("".to_string());
             return HttpResponse::Ok().content_type("text/html").body(body);
         } else {
             info!("error loading database messages");
@@ -393,6 +548,14 @@ fn web_msgs(_: HttpRequest) -> HttpResponse {
         info!("error connecting to database while display message base");
     }
     HttpResponse::Ok().into()
+}
+
+fn web_msgs_filter(form: Form<MsgsFilter>) -> HttpResponse {
+    web_msgs(Some(form))
+}
+
+fn web_msgs_no_filter(_: HttpRequest) -> HttpResponse {
+    web_msgs(None)
 }
 
 #[derive(Deserialize)]
@@ -875,7 +1038,11 @@ fn gw_conn(mut stream: TcpStream, peer_addr: SocketAddr) {
         }
         Err(e) => {
             if (e.kind() != ErrorKind::TimedOut) && (e.kind() != ErrorKind::WouldBlock) {
-                info!("error {:?} occurred, terminating connection with {}", e.kind(), peer_addr);
+                info!(
+                    "error {:?} occurred, terminating connection with {}",
+                    e.kind(),
+                    peer_addr
+                );
                 if let Err(e) = stream.shutdown(Shutdown::Both) {
                     info!("error when shutdown stream with {} :{}", peer_addr, e);
                 }
@@ -958,7 +1125,10 @@ fn main() {
         App::new()
             .resource("/api/", |r| r.method(http::Method::POST).with(api))
             .resource("/", |r| r.f(web_root))
-            .resource("/msgs/", |r| r.f(web_msgs))
+            .resource("/msgs/", |r| {
+                r.method(http::Method::GET).f(web_msgs_no_filter);
+                r.method(http::Method::POST).with(web_msgs_filter);
+            })
             .resource("/send_sms/", |r| {
                 r.method(http::Method::GET).f(web_send_sms_form);
                 r.method(http::Method::POST).with(web_send_sms);
