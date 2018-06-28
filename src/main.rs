@@ -577,7 +577,27 @@ struct ApiCheckInfo {
 struct ApiResult {
     error_no: u8,
     error_msg: String,
-    items: Vec<HashMap<String, String>>,
+    items: Vec<ApiResultItem>,
+}
+
+#[derive(Serialize)]
+enum ApiResultItem {
+    SmsItem(ApiResultSmsItem),
+    InfoItem(ApiResultInfoItem),
+}
+
+#[derive(Serialize)]
+struct ApiResultSmsItem {
+    phone: String,
+    sms_id: String,
+    error_no: u8,
+    error_msg: String,
+}
+
+#[derive(Serialize)]
+struct ApiResultInfoItem {
+    status_no: u8,
+    error_msg: String,
 }
 
 fn api_check_sms(sms_id: String) -> bool {
@@ -606,7 +626,7 @@ macro_rules! check_api_key {
             return Ok(Json(ApiResult {
                 error_no: 1,
                 error_msg: "API Key Not Found".to_string(),
-                items: vec![HashMap::new()],
+                items: vec![],
             }));
         }
     }};
@@ -621,16 +641,12 @@ fn api(req: String) -> Result<Json<ApiResult>> {
                 return Ok(Json(ApiResult {
                     error_no: 0,
                     error_msg: "OK".to_string(),
-                    items: vec![
-                        [
-                            ("phone".to_string(), format!("+{}", to_n)),
-                            ("sms_id".to_string(), sms_id),
-                            ("error_no".to_string(), "0".to_string()),
-                            ("error_msg".to_string(), "OK".to_string()),
-                        ].iter()
-                            .cloned()
-                            .collect(),
-                    ],
+                    items: vec![ApiResultItem::SmsItem(ApiResultSmsItem {
+                        phone: format!("+{}", to_n),
+                        sms_id: sms_id,
+                        error_no: 0,
+                        error_msg: "OK".to_string(),
+                    })],
                 }));
             } else {
                 info!("error adding msg from api call");
@@ -642,28 +658,24 @@ fn api(req: String) -> Result<Json<ApiResult>> {
         if (info.cmd == "status") && (info.sms_id != "") {
             let status;
             if api_check_sms(info.sms_id) {
-                status = "2";
+                status = 2;
             } else {
-                status = "10";
+                status = 10;
             };
             return Ok(Json(ApiResult {
                 error_no: 0,
                 error_msg: "OK".to_string(),
-                items: vec![
-                    [
-                        ("status_no".to_string(), status.to_string()),
-                        ("error_msg".to_string(), "OK".to_string()),
-                    ].iter()
-                        .cloned()
-                        .collect(),
-                ],
+                items: vec![ApiResultItem::InfoItem(ApiResultInfoItem {
+                    status_no: status,
+                    error_msg: "OK".to_string(),
+                })],
             }));
         }
     };
     Ok(Json(ApiResult {
         error_no: 0,
         error_msg: "OK".to_string(),
-        items: vec![HashMap::new()],
+        items: vec![],
     }))
 }
 
