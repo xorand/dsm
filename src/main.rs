@@ -10,6 +10,7 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 extern crate hex;
+extern crate md5;
 extern crate rand;
 
 extern crate byteorder;
@@ -21,7 +22,11 @@ use regex::Regex;
 #[macro_use]
 extern crate serde_derive;
 extern crate actix_web;
-use actix_web::{http, server, App, Form, HttpRequest, HttpResponse, Json, Result};
+extern crate actix_web_httpauth;
+use actix_web::middleware::{Middleware, Started};
+use actix_web::{http, server, App, Form, FromRequest, HttpRequest, HttpResponse, Json, Result};
+use actix_web_httpauth::extractors::basic::{BasicAuth, Config as AuthConfig};
+use actix_web_httpauth::extractors::AuthenticationError;
 extern crate uuid;
 
 #[macro_use]
@@ -191,6 +196,12 @@ fn read_cfg() -> AppCfg {
             .unwrap_or(&"5".to_string())
             .parse::<u16>()
             .unwrap_or(5),
+        web_user: cfg.get("web_user")
+            .unwrap_or(&"admin".to_string())
+            .to_string(),
+        web_pass: cfg.get("web_pass")
+            .unwrap_or(&"admin".to_string())
+            .to_string(),
     };
     app_cfg
 }
@@ -734,6 +745,8 @@ struct AppCfg {
     gw_port: String,
     gw_ping_timer: u16,
     gw_queue_timer: u16,
+    web_user: String,
+    web_pass: String,
 }
 
 lazy_static! {
@@ -1167,6 +1180,29 @@ fn gw_th_fn() {
     }
 }
 
+struct Auth;
+
+impl<S> Middleware<S> for Auth {
+    fn start(&self, req: &mut HttpRequest<S>) -> Result<Started> {
+        let mut config = AuthConfig::default();
+        config.realm(PRG);
+        let auth = BasicAuth::from_request(&req, &config)?;
+        match auth.password() {
+            Some(pass) => {
+                let digest = format!("{:x}", md5::compute(pass.as_bytes()));
+                if auth.username() == APP_STATE.app_cfg.web_user
+                    && digest == APP_STATE.app_cfg.web_pass
+                {
+                    Ok(Started::Done)
+                } else {
+                    Err(AuthenticationError::from(config).into())
+                }
+            }
+            None => Err(AuthenticationError::from(config).into()),
+        }
+    }
+}
+
 fn main() {
     setup_log().expect("can not setup logging");
     let bind = &format!(
@@ -1177,22 +1213,27 @@ fn main() {
         gw_th_fn();
     });
     server::new(|| {
-        App::new()
-            .resource("/api/", |r| r.method(http::Method::POST).with(api))
-            .resource("/rm/", |r| r.method(http::Method::POST).with(web_rm))
-            .resource("/", |r| r.f(web_root))
-            .resource("/msgs/", |r| {
-                r.method(http::Method::GET).f(web_msgs_no_filter);
-                r.method(http::Method::POST).with(web_msgs_filter);
-            })
-            .resource("/send_sms/", |r| {
-                r.method(http::Method::GET).f(web_send_sms_form);
-                r.method(http::Method::POST).with(web_send_sms);
-            })
-            .resource("/send_ussd/", |r| {
-                r.method(http::Method::GET).f(web_send_ussd_form);
-                r.method(http::Method::POST).with(web_send_ussd);
-            })
+        vec![
+            App::new()
+                .prefix("/api")
+                .resource("/", |r| r.method(http::Method::POST).with(api)),
+            App::new()
+                .middleware(Auth)
+                .resource("/rm/", |r| r.method(http::Method::POST).with(web_rm))
+                .resource("/", |r| r.f(web_root))
+                .resource("/msgs/", |r| {
+                    r.method(http::Method::GET).f(web_msgs_no_filter);
+                    r.method(http::Method::POST).with(web_msgs_filter);
+                })
+                .resource("/send_sms/", |r| {
+                    r.method(http::Method::GET).f(web_send_sms_form);
+                    r.method(http::Method::POST).with(web_send_sms);
+                })
+                .resource("/send_ussd/", |r| {
+                    r.method(http::Method::GET).f(web_send_ussd_form);
+                    r.method(http::Method::POST).with(web_send_ussd);
+                }),
+        ]
     }).bind(bind)
         .expect(&format!("can not bind api to {}", bind))
         .run();

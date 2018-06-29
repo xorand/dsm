@@ -67,6 +67,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-web-httpauth"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "actix-web 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "actix_derive"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -396,6 +406,7 @@ name = "dsm"
 version = "0.1.0"
 dependencies = [
  "actix-web 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-web-httpauth 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "askama 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -407,6 +418,7 @@ dependencies = [
  "log 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log-panics 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log4rs 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "md5 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-ini 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -790,6 +802,11 @@ dependencies = [
 [[package]]
 name = "matches"
 version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "md5"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -1793,6 +1810,7 @@ dependencies = [
 [metadata]
 "checksum actix 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)" = "7f0b2daad36916ccd2b162dbc5a04a74df642a29391b1a341c8ee3e82026cb16"
 "checksum actix-web 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)" = "e35bb192338dc7726564b0bdf2d49d43cbf4c7845231a82527f5f302bdb8f477"
+"checksum actix-web-httpauth 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "56ddae68b376c7a9295169b75a40fb06efeafef7096516b5c3c82aca437adebf"
 "checksum actix_derive 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c4b1dc922654b9aca7a8a31eab875fde804fa9fbd67f220f2e457787b23590f2"
 "checksum aho-corasick 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)" = "f0ba20154ea1f47ce2793322f049c5646cc6d0fa9759d5f333f286e507bf8080"
 "checksum antidote 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "34fde25430d87a9388dadbe6e34d7f72a462c8b43ac8d309b42b0a8505d7e2a5"
@@ -1879,6 +1897,7 @@ dependencies = [
 "checksum log4rs 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a1f16090a553200fba94e104310b3e53e71f500fd9db7dc2143055aa3cc7ae63"
 "checksum lru-cache 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "4d06ff7ff06f729ce5f4e227876cb88d10bc59cd4ae1e09fbb2bde15c850dc21"
 "checksum matches 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "100aabe6b8ff4e4a7e32c1c13523379802df0772b82466207ac25b013f193376"
+"checksum md5 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)" = "daa1004633f76cdcd5a9d83ffcfe615e30ca7a2a638fcc8b8039a2dac21289d7"
 "checksum memchr 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "796fba70e76612589ed2ce7f45282f5af869e0fdd7cc6199fa1aa1f1d591ba9d"
 "checksum memoffset 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "0f9dc261e2b62d7a622bf416ea3c5245cdd5d9a7fcc428c0d06804dfce1775b3"
 "checksum mime 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)" = "0b28683d0b09bbc20be1c9b3f6f24854efb1356ffcffee08ea3f6e65596e85fa"

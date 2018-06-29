@@ -5,6 +5,7 @@ authors = ["ph"]
 
 [dependencies]
 actix-web = "*"
+actix-web-httpauth = "*"
 rust-ini = "*"
 log = "*"
 log-panics = "*"
@@ -22,3 +23,4 @@ regex = "*"
 hex = "*"
 byteorder = "*"
 rand = "*"
+md5 = "*"
