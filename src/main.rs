@@ -558,7 +558,14 @@ fn web_msgs_no_filter(_: HttpRequest) -> HttpResponse {
     web_msgs(None)
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ApiRequest {
+    SendInfo(ApiSendInfo),
+    CheckInfo(ApiCheckInfo),
+}
+
+#[derive(Debug, Deserialize)]
 struct ApiSendInfo {
     cmd: String,
     api_key: String,
@@ -566,7 +573,7 @@ struct ApiSendInfo {
     to: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ApiCheckInfo {
     cmd: String,
     api_key: String,
@@ -597,7 +604,7 @@ struct ApiResultSmsItem {
 
 #[derive(Serialize)]
 struct ApiResultInfoItem {
-    status_no: u8,
+    status_no: String,
     error_msg: String,
 }
 
@@ -633,46 +640,48 @@ macro_rules! check_api_key {
     }};
 }
 
-fn api(req: String) -> Result<Json<ApiResult>> {
-    if let Ok(info) = serde_urlencoded::from_str::<ApiSendInfo>(&req) {
-        check_api_key!(info);
-        if (info.cmd == "send") && (info.message != "") && (info.to != "") {
-            let to_n: String = RE_NUM.replace_all(&info.to, "").to_owned().to_string();
-            if let Ok(sms_id) = add_msg(MsgType::SmsOut, &to_n, &info.message, 1) {
+fn api(req: Form<ApiRequest>) -> Result<Json<ApiResult>> {
+    match req.0 {
+        ApiRequest::SendInfo(info) => {
+            check_api_key!(info);
+            if (info.cmd == "send") && (info.message != "") && (info.to != "") {
+                let to_n: String = RE_NUM.replace_all(&info.to, "").to_owned().to_string();
+                if let Ok(sms_id) = add_msg(MsgType::SmsOut, &to_n, &info.message, 1) {
+                    return Ok(Json(ApiResult {
+                        error_no: 0,
+                        error_msg: "OK".to_string(),
+                        items: vec![ApiResultItem::SmsItem(ApiResultSmsItem {
+                            phone: format!("+{}", to_n),
+                            sms_id: sms_id,
+                            error_no: 0,
+                            error_msg: "OK".to_string(),
+                        })],
+                    }));
+                } else {
+                    info!("error adding msg from api call");
+                }
+            }
+        },
+        ApiRequest::CheckInfo(info) => {
+            check_api_key!(info);
+            if (info.cmd == "status") && (info.sms_id != "") {
+                let status;
+                if api_check_sms(info.sms_id) {
+                    status = "2".to_string();
+                } else {
+                    status = "10".to_string();
+                };
                 return Ok(Json(ApiResult {
                     error_no: 0,
                     error_msg: "OK".to_string(),
-                    items: vec![ApiResultItem::SmsItem(ApiResultSmsItem {
-                        phone: format!("+{}", to_n),
-                        sms_id: sms_id,
-                        error_no: 0,
+                    items: vec![ApiResultItem::InfoItem(ApiResultInfoItem {
+                        status_no: status,
                         error_msg: "OK".to_string(),
                     })],
                 }));
-            } else {
-                info!("error adding msg from api call");
             }
         }
-    };
-    if let Ok(info) = serde_urlencoded::from_str::<ApiCheckInfo>(&req) {
-        check_api_key!(info);
-        if (info.cmd == "status") && (info.sms_id != "") {
-            let status;
-            if api_check_sms(info.sms_id) {
-                status = 2;
-            } else {
-                status = 10;
-            };
-            return Ok(Json(ApiResult {
-                error_no: 0,
-                error_msg: "OK".to_string(),
-                items: vec![ApiResultItem::InfoItem(ApiResultInfoItem {
-                    status_no: status,
-                    error_msg: "OK".to_string(),
-                })],
-            }));
-        }
-    };
+    }    
     Ok(Json(ApiResult {
         error_no: 0,
         error_msg: "OK".to_string(),
