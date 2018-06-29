@@ -289,6 +289,31 @@ fn web_root(_: HttpRequest) -> HttpResponse {
     HttpResponse::Ok().content_type("text/html").body(body)
 }
 
+#[derive(Deserialize)]
+struct WebRmInfo {
+    msg_id: String,
+}
+
+fn web_rm(form: Form<WebRmInfo>) -> HttpResponse {
+    if form.msg_id.len() == 32 {
+        if let Ok(db) = conn_db() {
+            if let Err(e) =
+                diesel::delete(msg::table.filter(msg::msg_id.eq(&form.msg_id))).execute(&db)
+            {
+                info!(
+                    "error when deleting msg, msg_id {}, error {}",
+                    form.msg_id, e
+                );
+            }
+        } else {
+            info!("error connecting to database when deleting msg");
+        }
+    }
+    HttpResponse::MovedPermanenty()
+        .header("Location", "/msgs/")
+        .body("")
+}
+
 #[derive(Template)]
 #[template(
     source = "<html>
@@ -393,7 +418,7 @@ fn add_msg(
     source = "<html>
     <meta charset='utf-8'>
     <table border=1>
-    <th>date</th><th>msg id</th><th>msg type</th><th>phone</th><th>msg</th><th>slot</th><th>status</th>
+    <th>date</th><th>msg id</th><th>msg type</th><th>phone</th><th>msg</th><th>slot</th><th>status</th><th></th>
     <tr><form action='/msgs/' method='post'>
     <td><input type='date' name='date1' value='{{date1}}'></td>
     <td><input type='date' name='date2' value='{{date2}}'></td>
@@ -429,6 +454,11 @@ fn add_msg(
         <td>{{msg.msg_txt}}</td>
         <td>{{msg.slot}}</td>
         <td>{{msg.status}}</td>        
+        <form action='/rm/' method='post'>
+        <input type=hidden name='msg_id' value='{{msg.msg_id}}'></input>
+        <td>
+        <input type='submit' value='-'></form>
+        </td>
     </tr>    
     {% endfor %}
     </table></html>",
@@ -661,7 +691,7 @@ fn api(req: Form<ApiRequest>) -> Result<Json<ApiResult>> {
                     info!("error adding msg from api call");
                 }
             }
-        },
+        }
         ApiRequest::CheckInfo(info) => {
             check_api_key!(info);
             if (info.cmd == "status") && (info.sms_id != "") {
@@ -681,7 +711,7 @@ fn api(req: Form<ApiRequest>) -> Result<Json<ApiResult>> {
                 }));
             }
         }
-    }    
+    }
     Ok(Json(ApiResult {
         error_no: 0,
         error_msg: "OK".to_string(),
@@ -1150,6 +1180,7 @@ fn main() {
     server::new(|| {
         App::new()
             .resource("/api/", |r| r.method(http::Method::POST).with(api))
+            .resource("/rm/", |r| r.method(http::Method::POST).with(web_rm))
             .resource("/", |r| r.f(web_root))
             .resource("/msgs/", |r| {
                 r.method(http::Method::GET).f(web_msgs_no_filter);
