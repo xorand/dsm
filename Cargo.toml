@@ -16,7 +16,6 @@ libsqlite3-sys = { version = "*", features = ["bundled"] }
 askama = "*"
 serde = "*"
 serde_derive = "*"
-serde_urlencoded = "*"
 uuid = { version = "*", features = ["v4"] }
 lazy_static = "*"
 regex = "*"

@@ -21,7 +21,6 @@ use regex::Regex;
 #[macro_use]
 extern crate serde_derive;
 extern crate actix_web;
-extern crate serde_urlencoded;
 use actix_web::{http, server, App, Form, HttpRequest, HttpResponse, Json, Result};
 extern crate uuid;
 
