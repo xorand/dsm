@@ -761,7 +761,7 @@ lazy_static! {
     static ref RE_USSD: Regex = Regex::new(r"[^\d*#]+").expect("could not compile regex");
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct DinHeader {
     len: u32,
     mac: String,
@@ -769,15 +769,16 @@ struct DinHeader {
     serial: u32,
     htype: u16,
     flag: u16,
+    data: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct DinData {
     htype: u16,
     body: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct DinSms {
     number: String,
     stype: u8,
@@ -789,7 +790,7 @@ struct DinSms {
     content: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct DinUssd {
     port: u8,
     status: u8,
@@ -951,11 +952,11 @@ fn pkt_u16(pkt: &mut Vec<u8>, value: u16) {
     pkt.append(&mut buf);
 }
 
-fn gw_send(mut stream: &TcpStream, header: DinHeader, sdata: DinData) {
+fn gw_send(mut stream: &TcpStream, header: &DinHeader, sdata: DinData) {
     let mut pkt: Vec<u8> = vec![];
     pkt_u32(&mut pkt, sdata.body.len() as u32);
     pkt.append(&mut Vec::from(
-        hex::decode(header.mac).unwrap_or(vec![0, 0, 0, 0, 0, 0]),
+        hex::decode(header.mac.clone()).unwrap_or(vec![0, 0, 0, 0, 0, 0]),
     ));
     pkt_u16(&mut pkt, 0);
     pkt_u32(&mut pkt, header.time);
@@ -969,27 +970,83 @@ fn gw_send(mut stream: &TcpStream, header: DinHeader, sdata: DinData) {
     }
 }
 
+fn gw_parse_headers(data: &[u8]) -> Vec<DinHeader> {
+    let mut offset = 0;
+    let mut headers = Vec::new();
+    while offset < data.len() {
+        let len = BigEndian::read_u32(&data[0 + offset..4 + offset]);
+        headers.push(DinHeader {
+            len: len,
+            mac: hex::encode(&data[4 + offset..10 + offset]),
+            time: BigEndian::read_u32(&data[12 + offset..16 + offset]),
+            serial: BigEndian::read_u32(&data[16 + offset..20 + offset]),
+            htype: BigEndian::read_u16(&data[20 + offset..22 + offset]),
+            flag: BigEndian::read_u16(&data[22 + offset..24 + offset]),
+            data: data[24 + offset..24 + offset + len as usize].to_vec(),
+        });
+        offset = offset + 24 + len as usize;
+    }
+    headers
+}
+
+#[test]
+fn gw_parse_header_test() {
+    let data1 = hex::decode("00000031001fd6c7800300000d6c247100001ce30005000037393131383933363331390000000000000000000000000000003230313830373032323033363535000300000474657374").unwrap();
+    let header = gw_parse_headers(&data1);
+    let data2 = hex::decode("00000032001fd6c7800300000d6c29e800001cf100050000373931313839333633313900000000000000000000000000000032303138303730323230353030330003000005746573743100000032001fd6c7800300000d6c29e800001cf2000500003739313138393336333139000000000000000000000000000000323031383037303232303530313700030000057465737432").unwrap();
+    let headers = gw_parse_headers(&data2);
+    assert_eq!(
+        header,
+        vec![DinHeader {
+            len: 49,
+            mac: "001fd6c78003".to_string(),
+            time: 225191025,
+            serial: 7395,
+            htype: 5,
+            flag: 0,
+            data: hex::decode("37393131383933363331390000000000000000000000000000003230313830373032323033363535000300000474657374").unwrap(),
+        }],
+        "{:?} {:?}", header, hex::encode(&header[0].data)
+    );
+    assert_eq!(
+        headers,
+        vec![
+            DinHeader {
+                len: 50,
+                mac: "001fd6c78003".to_string(),
+                time: 225192424,
+                serial: 7409,
+                htype: 5,
+                flag: 0,
+                data: hex::decode("3739313138393336333139000000000000000000000000000000323031383037303232303530303300030000057465737431").unwrap(),
+            },
+            DinHeader {
+                len: 50,
+                mac: "001fd6c78003".to_string(),
+                time: 225192424,
+                serial: 7410,
+                htype: 5,
+                flag: 0,
+                data: hex::decode("3739313138393336333139000000000000000000000000000000323031383037303232303530313700030000057465737432").unwrap(),
+            },
+        ],
+        "{:?} {:?} {:?}", headers, hex::encode(&headers[0].data), hex::encode(&headers[1].data)
+    );
+}
+
 fn gw_parse_data(stream: &TcpStream, data: &[u8], ping: &mut Ping) {
     if data.len() < 24 {
         ()
     }
     info!("<- {}", hex::encode(data));
-    let header = DinHeader {
-        len: BigEndian::read_u32(&data[0..4]),
-        mac: hex::encode(&data[4..10]),
-        time: BigEndian::read_u32(&data[12..16]),
-        serial: BigEndian::read_u32(&data[16..20]),
-        htype: BigEndian::read_u16(&data[20..22]),
-        flag: BigEndian::read_u16(&data[22..24]),
-    };
-    let data_len: usize = 24 + (header.len as usize);
-    if data.len() < data_len {
-        ()
+    let headers = gw_parse_headers(data);
+    for header in headers {
+        let sdata = gw_parse_type(header.htype, &header.data, ping);
+        if sdata.htype != 0 {
+            gw_send(stream, &header, sdata)
+        }
     }
-    let sdata = gw_parse_type(header.htype, &data[24..data_len], ping);
-    if sdata.htype != 0 {
-        gw_send(stream, header, sdata)
-    }
+    
 }
 
 fn gw_create_header() -> DinHeader {
@@ -1000,13 +1057,14 @@ fn gw_create_header() -> DinHeader {
         serial: rand::random::<u32>(),
         htype: 0,
         flag: 0,
+        data: vec![],
     }
 }
 
 fn gw_ping_fn(stream: &TcpStream) {
     gw_send(
         stream,
-        gw_create_header(),
+        &gw_create_header(),
         DinData {
             htype: 0,
             body: vec![],
@@ -1050,7 +1108,7 @@ fn gw_queue_fn(stream: &TcpStream) {
                             htype: 1,
                             body: body,
                         };
-                        gw_send(stream, gw_create_header(), sdata);
+                        gw_send(stream, &gw_create_header(), sdata);
                     }
                     MsgType::UssdOut => {
                         info!("sending ussd to port {}", result.slot);
@@ -1066,7 +1124,7 @@ fn gw_queue_fn(stream: &TcpStream) {
                             htype: 9,
                             body: body,
                         };
-                        gw_send(stream, gw_create_header(), sdata);
+                        gw_send(stream, &gw_create_header(), sdata);
                     }
                     _ => {}
                 }
