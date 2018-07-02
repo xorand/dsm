@@ -4,7 +4,7 @@ all:
 	cargo build --release
 	mkdir -p run
 	service supervisor stop
-	sleep 1
+	while pgrep -u root $(OBJ); do sleep 1; done
 	cp target/release/$(OBJ) run/
 	strip run/$(OBJ)
 	service supervisor start
