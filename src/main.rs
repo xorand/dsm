@@ -990,7 +990,7 @@ fn gw_parse_headers(data: &[u8]) -> Vec<DinHeader> {
 }
 
 #[test]
-fn gw_parse_header_test() {
+fn gw_parse_headers_test() {
     let data1 = hex::decode(
         "\
          00000031001fd6c7800300000d6c247100001ce3000500003739313138393336\
